@@ -1,0 +1,37 @@
+{
+ "label": "m4pro-iq4xs-v080-off",
+ "when": "2026-10-30T12:56",
+ "args": {
+  "label": "m4pro-iq4xs-v080-off",
+  "url": "http://127.0.0.1:18020",
+  "workloads": "chat,quote",
+  "sampling": "default",
+  "max_tokens": 512,
+  "prompts": 4,
+  "no_think": false
+ },
+ "server": {
+  "model_path": "/Users/leonardolima/.lmstudio/models/unsloth/Qwen3.8-27B-GGUF/Qwen3.8-27B-UD-IQ4_XS.gguf",
+  "total_slots": 1,
+  "build_info": "b11960-8642541b2"
+ },
+ "swap_mb_before": 915.75,
+ "rows": {
+  "chat/default": {
+   "decode_tok_s": 10.07,
+   "prefill_tok_s": 75.3,
+   "acceptance": null,
+   "predicted_tokens": 2048,
+   "requests": 4
+  },
+  "quote/default": {
+   "decode_tok_s": 10.28,
+   "prefill_tok_s": 95.8,
+   "acceptance": null,
+   "predicted_tokens": 2335,
+   "requests": 1,
+   "coverage": 1.0
+  }
+ },
+ "swap_mb_after": 907.75
+}

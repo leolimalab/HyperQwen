@@ -1,0 +1,39 @@
+{
+ "label": "m4pro-mlx4bit-text-off",
+ "when": "2026-10-30T13:42",
+ "args": {
+  "label": "m4pro-iq4xs-mlxtext-off",
+  "url": "http://127.0.0.1:18020",
+  "workloads": "chat,quote",
+  "sampling": "default",
+  "max_tokens": 512,
+  "prompts": 4,
+  "no_think": false,
+  "model": "/Users/leonardolima/models/mlx/Qwen3.8-27B-MLX-4bit-text"
+ },
+ "server": {
+  "model_path": "/Users/leonardolima/models/mlx/Qwen3.8-27B-MLX-4bit-text",
+  "total_slots": null,
+  "build_info": "mlx_vlm"
+ },
+ "swap_mb_before": 1389.5,
+ "rows": {
+  "chat/default": {
+   "decode_tok_s": 15.38,
+   "prefill_tok_s": 89.7,
+   "acceptance": null,
+   "predicted_tokens": 2048,
+   "requests": 4
+  },
+  "quote/default": {
+   "decode_tok_s": 15.11,
+   "prefill_tok_s": 107.3,
+   "acceptance": null,
+   "predicted_tokens": 2335,
+   "requests": 1,
+   "coverage": 1.0
+  }
+ },
+ "swap_mb_after": 1221.5,
+ "note": "mlx_vlm 0.7.10, text-only 4-bit MLX target, no drafter, LOAD_GRACE_S=120"
+}
