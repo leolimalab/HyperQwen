@@ -1,0 +1,39 @@
+{
+ "label": "m4pro-flint-iq3xxs-lookup",
+ "when": "2026-10-30T15:35",
+ "args": {
+  "label": "m4pro-flint-iq3xxs-lookup",
+  "url": "http://127.0.0.1:18020",
+  "workloads": "chat,quote",
+  "sampling": "default",
+  "max_tokens": 512,
+  "prompts": 4,
+  "no_think": false,
+  "model": "flint",
+  "stream": false
+ },
+ "server": {
+  "model_path": "/Users/leonardolima/.lmstudio/models/unsloth/flint-GGUF/flint-UD-IQ3_XXS.gguf",
+  "total_slots": 1,
+  "build_info": "b11960-8642541b2"
+ },
+ "swap_mb_before": 930.88,
+ "rows": {
+  "chat/default": {
+   "decode_tok_s": 62.26,
+   "prefill_tok_s": 313.4,
+   "acceptance": 0.344,
+   "predicted_tokens": 2048,
+   "requests": 4
+  },
+  "quote/default": {
+   "decode_tok_s": 109.59,
+   "prefill_tok_s": 645.8,
+   "acceptance": 0.895,
+   "predicted_tokens": 2400,
+   "requests": 1,
+   "coverage": 0.0
+  }
+ },
+ "swap_mb_after": 930.88
+}
