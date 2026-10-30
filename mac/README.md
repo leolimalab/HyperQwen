@@ -29,22 +29,31 @@ por token. O número deles foi medido com o motor próprio (`rec`) num M4 Pro de
 
 O `rec` não roda aqui. O manifesto dele exige `min_ram_bytes` de 48 GiB, e o CLI recusa abaixo disso
 ("this model requires 48 GiB of memory"). O único modelo dele é o `flint-int4` em MLX, de 22,6 GB, que também não cabe
-em 24 GB. Neste Mac, o caminho é o llama.cpp 0.8.0, que já conhece a arquitetura `flint`, com o
+em 24 GB. Testado em 2026-10-30: o instalador oficial (rec 0.1.1) para antes de instalar, com "this model requires 48 GiB of
+memory; detected 24 GiB". Neste Mac, o caminho é o llama.cpp 0.8.0, que já conhece a arquitetura `flint`, com o
 `unsloth/flint-GGUF` UD-IQ3_XXS (14,5 GB):
 
 ```bash
 bash mac/download.sh flint
-MODEL_PRESET=flint bash mac/serve.sh             # SPEC=off, CTX=long (64k), lookup ligado
+bash mac/download.sh flint-dflash                # drafter DFlash2 do Flint, 0,43 GB
+MODEL_PRESET=flint bash mac/serve.sh             # DFlash2 com 3 drafts + lookup, CTX=long (64k)
+MODEL_PRESET=flint SPEC=off bash mac/serve.sh    # sem drafter (0,4 GB a menos)
 python3 mac/bench.py flint --model flint --quote-max-tokens 8000
 ```
 
 Mesmo protocolo da tabela de resultados (2026-10-30, llama.cpp 0.8.0, KV q8_0, 64k de contexto, ~16,6 GB no total,
 16–19% de memória livre e sem swap):
 
-| Flint UD-IQ3_XXS | chat (tok/s) | prefill do chat | cópia (tok/s) | aceitação na cópia | cópia: tokens / cobertura |
+| Flint UD-IQ3_XXS | chat (tok/s) | aceitação no chat | cópia (tok/s) | aceitação na cópia | cópia: tokens / cobertura |
 |---|---|---|---|---|---|
-| sem lookup | **62,67** | 250 | 56,61 | — | 7.850 / 0,99 |
-| **com lookup (`LOOKUP=ngram-mod`)** | **62,26** | 313 | **121,78** | 0,95 | 6.972 / 0,98 |
+| sem drafter, sem lookup | 62,67 | — | 56,61 | — | 7.850 / 0,99 |
+| só lookup (`SPEC=off`) | 62,26 | 0,34 | **121,78** | 0,95 | 6.972 / 0,98 |
+| DFlash2 2 drafts + lookup | 60,03 | 0,48 | 109,77 | 0,86 | 8.000 (limite) / — |
+| **DFlash2 3 drafts + lookup (padrão do preset)** | **65,84** | 0,45 | 118,19 | 0,86 | 6.798 / 0,92 |
+| DFlash2 3 drafts, sorteio `greedy` + lookup | 60,07 | 0,39 | 104,50 | 0,80 | 7.569 / 0,89 |
+| DFlash2 4 drafts + lookup | 63,17 | 0,36 | 106,85 | 0,80 | 8.000 (limite) / — |
+| DFlash2 5 drafts + lookup | 62,45 | 0,33 | 111,21 | 0,79 | 8.000 (limite) / — |
+| DFlash2 7 drafts + lookup | 54,86 | 0,25 | 105,94 | 0,72 | 8.000 (limite) / — |
 | Qwen3.8-27B, DFlash2 + lookup (padrão), para comparar | 18,05 | 74 | 38,28 | 0,96 | 2.335 / 1,0 |
 
 - **3,5× o Qwen no chat e 3,4× na leitura do prompt.** A velocidade não cai em outros idiomas: sem drafter, não há aceitação para cair.
@@ -54,8 +63,35 @@ Mesmo protocolo da tabela de resultados (2026-10-30, llama.cpp 0.8.0, KV q8_0, 6
   (~57 s contra ~61 s), mesmo com 3× mais tokens por segundo.
 - **Lookup:** no chat quase não dispara (aceitação de 0,34 em poucos drafts). Na cópia, dobra a velocidade (121,8 contra
   56,6 tok/s), porque o raciocínio repete o documento.
+- **DFlash2 do Flint** (`incoai/Flint-DFlash2-GGUF` Q8_0, 0,43 GB, `bash mac/download.sh flint-dflash`): só rende com bloco curto.
+  - Num MoE, verificar k tokens acorda até 6 especialistas por token em cada camada, então o custo da verificação cresce rápido.
+  - A aceitação aqui (0,25–0,48) também fica bem abaixo da do cartão do modelo, de 3,5–4,5 tokens por passada em GPU com o
+    alvo em BF16. Aqui o alvo está em IQ3.
+  - O melhor foi 3 drafts com sorteio `probabilistic`: +5% no chat (65,8 contra 62,7). Isso é perto da variação entre execuções
+    com temperatura 1,0, e só uma repetição confirmaria.
+  - 7 drafts pioram (54,9). Na cópia, o lookup sozinho continua o melhor.
+- **"Limite" na tabela:** o raciocínio muda de tamanho a cada execução (temperatura 1,0). Em quatro configurações ele passou
+  de ~27 mil caracteres, e a cópia não terminou dentro dos 8.000 tokens. A velocidade dessas linhas vale como velocidade
+  de geração, mas não como cópia completa.
 - **Qualidade não foi medida.** O Flint é focado em código agêntico, e o IQ3_XXS perde algo em relação ao NVFP4 oficial.
   Vale um teste de qualidade (GSM8K, ou as suas próprias tarefas) antes de trocar o modelo do dia a dia.
+
+### Forks do rec e Tempo9 (testado em 2026-10-30)
+
+- Dos 43 forks do `recursive-oss/rec`, só um mira Macs de 24 GB: `thinkspread/rec@local/flint-e3-24gb`. Ele tira a trava
+  de 48 GiB, aceita especialistas em INT3 e fixa os pesos com `mx.set_wired_limit`. Mas exige um checkpoint MLX `flint-int4-e3`
+  que não está publicado em lugar nenhum.
+- Os mesmos autores (ThinkSpread) publicam o **Tempo9** e um GGUF de 24 GB do Flint, o `thinkspread/Flint-Q6K-IQ3XXS-GGUF`
+  (18,0 GB). Eles anunciam 123–127 tok/s num **M5 Pro** de 24 GB. No **M4 Pro**:
+  - o Tempo9 1.2.1 roda **na CPU**: ~17 tok/s. O motor Metal exige a tensor API do Metal 4 (M5 ou mais novo) e
+    "no pre-M5 fallback by design";
+  - com `AS_METAL_TENSOR_FORCE=1`, ele usa a GPU, mas gera lixo, a ~67 tok/s de texto sem sentido;
+  - o GGUF de 18 GB no llama.cpp deixou só 8% de memória livre depois de carregar, e a trava do teste (12%) cancelou a medição.
+- O binário do Tempo9 é assinado ("Developer ID Application: Jiejing Zhang") e notarizado pela Apple. Durante os testes,
+  só abriu o próprio servidor em `127.0.0.1`. O projeto é muito novo (domínio e organização no GitHub de 17/08/2026, um único
+  desenvolvedor), e o motor é fechado.
+- Conclusão para um M4 Pro de 24 GB: o melhor caminho do Flint continua sendo o llama.cpp com o UD-IQ3_XXS
+  (`MODEL_PRESET=flint`).
 
 ## Por que llama.cpp e não MLX
 

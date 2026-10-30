@@ -212,6 +212,69 @@ O teste de cópia reproduz ~2k tokens.
 - Memória: ~16,6 GB estimados, 16–19% livres com o modelo carregado e nenhum crescimento de swap.
 - Qualidade do Flint em IQ3_XXS: não medida.
 
+## Flint com DFlash2 (pedido do usuário: "mais otimizações com MTP ou DFlash2", ~16:05)
+
+- O Flint não tem MTP. Existe o `incoai/Flint-DFlash2-GGUF` (26/10, bloco 8, alvo `RecursiveSI/flint`). O cartão dele indica
+  aceitação de 3,5–4,5 tokens por passada e 1,8–2,3× de velocidade numa GB300 em BF16. Baixei o Q8_0 (0,43 GB).
+- `mac/serve.sh`: o preset `flint` passou a apontar para esse drafter e recusa `SPEC=mtp`. `mac/download.sh flint-dflash`.
+- Duas rodadas, com aval, com o LM Studio fechado pelo usuário antes da primeira. DFlash2 + lookup (chat / cópia, tok/s):
+  - 7 drafts: 54,86 / 105,94;
+  - 5 drafts: 62,45 / 111,21;
+  - **3 drafts: 65,84 / 118,19**;
+  - 4 drafts: 63,17 / 106,85;
+  - 2 drafts: 60,03 / 109,77;
+  - 3 drafts com sorteio greedy: 60,07 / 104,50.
+  
+  Aceitação no chat: 0,25 (7 drafts) a 0,48 (2 drafts). Nenhum crescimento de swap.
+- Conclusão:
+  - No Mac, o DFlash2 rende pouco num MoE: verificar mais tokens acorda mais especialistas, e a aceitação com o alvo IQ3 fica
+    abaixo da do cartão.
+  - O melhor (3 drafts, +5% no chat) está perto da variação entre execuções.
+  - Ficou como padrão do preset `flint` (`SPEC=dflash DRAFT_TOKENS=3`), como combinado com o usuário. `SPEC=off` volta ao Flint
+    sem drafter.
+  - Na cópia, o melhor continua sendo o lookup sozinho (121,8).
+- A cópia não terminou dentro dos 8.000 tokens em 4 das 6 configurações, porque o raciocínio variou entre ~18 e ~30 mil caracteres.
+
+## Teste do rec (pedido do usuário, ~16:30)
+
+- O instalador oficial foi lido antes (binário com SHA-256 em `~/.local/bin`, dados em `~/.local/share/rec`, linha de PATH no
+  `~/.zshrc`). O classificador de segurança bloqueou a instalação feita por mim, então o usuário rodou a instalação com
+  `SHELL=/bin/sh`, para não alterar o `~/.zshrc`.
+- Resultado: rec 0.1.1, modelo `flint (flint-int4)`, motor `mlx (metal)`. A instalação parou com "This Mac does not meet the
+  requirements / rec: this model requires 48 GiB of memory; detected 24 GiB". O binário não foi instalado, o `~/.zshrc` não
+  mudou e ficaram só pastas vazias em `~/.local/share/rec`.
+- Conclusão: o rec não roda em Macs de 24 GB. O caminho do Flint aqui é o llama.cpp (`MODEL_PRESET=flint`).
+
+## Forks do rec e Tempo9 (pedido do usuário, ~16:45)
+
+- **Forks:** os 43 forks do `recursive-oss/rec` foram comparados branch por branch com o original. Para 24 GB, só
+  `thinkspread/rec@local/flint-e3-24gb` serve. Ele remove a trava de 48 GiB, aceita `routed_expert_bits` 3 e chama
+  `mx.set_wired_limit`, mas depende de um checkpoint `flint-int4-e3` não publicado. `ericzhoun/rec@apple-m5-32gb` só remove a trava.
+  Os outros tratam de outros chips (M1/M2/M3/M4 Max, ROCm, CUDA) ou de funções do servidor.
+- **Tempo9 (ThinkSpread, motor fechado, Apache-2.0 no SDK e no CLI):** o usuário perguntou se o thinkspread.com é confiável (o site
+  não respondia, nem para mim).
+  - Avaliação passada a ele: desenvolvedor identificável (Jiejing Zhang, GitHub desde 2009, 29 commits no `modelscope/dash-infer`);
+    binário assinado com Developer ID e notarizado; SHA-256 conferido com a fórmula; domínio e organização criados em 17/08/2026;
+    0 estrelas.
+  - O usuário decidiu seguir.
+- **Downloads e instalação:**
+  - `thinkspread/Flint-Q6K-IQ3XXS-GGUF` (18,03 GB), com SHA-256 igual ao publicado;
+  - `brew install thinkspread/tap/tempo9`, versão 1.2.1;
+  - `mac/serve_tempo9.sh` (novo) e `mac/download.sh flint-tempo9`;
+  - `mac/bench.py`: streaming de JSON puro, contagem de pedaços quando não há `usage`, recurso ao relógio de parede quando
+    nada visível é transmitido, e `e2e_tok_s`.
+- **Resultados no M4 Pro:**
+  - Tempo9 na CPU (o Metal fica desligado em chips anteriores ao M5, por projeto): ~16–17 tok/s;
+  - `AS_METAL_TENSOR_FORCE=1`: o Metal sobe, mas a resposta a "17*23" foi lixo, 3.000 tokens a ~67 tok/s, com 7% de memória livre;
+  - o mesmo GGUF no llama.cpp deixou 8% livres depois de carregar e foi cancelado pela trava de 12%.
+  
+  Em nenhum dos testes o swap cresceu de forma sustentada, e o `tempo9` só abriu conexão em `127.0.0.1:18020`.
+- **Conclusão:** o Tempo9 só vale em Mac com M5. Para o M4 Pro de 24 GB, o Flint continua no llama.cpp com o UD-IQ3_XXS.
+- **Limpeza (aprovada pelo usuário):** removidos o `tempo9` (`brew uninstall`), `~/.lmstudio/models/thinkspread` (17 GB),
+  `~/.cache/tempo9`, `~/models/mlx` (cópia MLX só texto, 14 GB), `~/models/omlx-models` e `~/models/omlx-bench`. O disco foi de
+  13 para 45 GB livres. O tap `thinkspread/tap` continua no Homebrew. O `serve_mlx.sh` e o `serve_omlx.sh` voltam a funcionar
+  depois de `bash mac/download.sh mlx-text`.
+
 ## Issues remanescentes
 
 - Ajustes ainda não medidos (cada um precisa de aval para carregar o 27B):
@@ -232,6 +295,8 @@ O teste de cópia reproduz ~2k tokens.
 - `mac/serve.sh`, `mac/serve_mlx.sh`, `mac/serve_omlx.sh`, `mac/common.sh`, `mac/mlx_text_only.py`, `mac/bench.py`, `mac/download.sh`, `mac/README.md` (novos)
 - Fora do repositório:
   - `~/.lmstudio/models/unsloth/flint-GGUF/flint-UD-IQ3_XXS.gguf` (14,5 GB);
+  - `~/.lmstudio/models/incoai/Flint-DFlash2-GGUF/Flint-DFlash2-Q8_0.gguf` (0,43 GB);
+  - `~/.lmstudio/models/thinkspread/Flint-Q6K-IQ3XXS-GGUF/` (18 GB) e o `tempo9` 1.2.1 via Homebrew (removidos depois do teste);
   - `~/models/mlx-drafters/` (DFlash2 e MTP em MLX);
   - `~/models/mlx/Qwen3.8-27B-MLX-4bit-text/` (14,1 GiB);
   - `~/models/omlx-models/` (só links);

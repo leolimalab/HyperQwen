@@ -69,12 +69,14 @@ def chat(url, messages, max_tokens, sampling, think=True):
             out = json.load(r)
             out["_wall"] = time.time() - t0
             return out
-        text, reasoning, usage, t_first, t_last = [], [], {}, None, None
+        text, reasoning, usage, t_first, t_last, pieces = [], [], {}, None, None, 0
         for raw in r:
             line = raw.decode().strip()
-            if not line.startswith("data:") or line == "data: [DONE]":
+            if line.startswith("data:"):
+                line = line[5:].strip()      # SSE; Tempo9 and Ollama send bare JSON lines
+            if not line.startswith("{"):
                 continue
-            ev = json.loads(line[5:])
+            ev = json.loads(line)
             usage = ev.get("usage") or usage
             for ch in ev.get("choices") or []:
                 d = ch.get("delta") or {}
@@ -83,15 +85,20 @@ def chat(url, messages, max_tokens, sampling, think=True):
                 if piece:
                     t_last = time.time()
                     t_first = t_first or t_last
+                    pieces += 1
                     text.append(d.get("content") or "")
                     reasoning.append(thought)
     # The server's own rates when it sends them; otherwise the client's clock,
     # first streamed token to last (speculative chunks carry several tokens, so
     # the count comes from usage, not from the chunks).
-    n = usage.get("completion_tokens", 0)
+    n = usage.get("completion_tokens") or pieces   # no usage in the stream: one chunk per token
     p = usage.get("prompt_tokens", 0) - ((usage.get("prompt_tokens_details") or {}).get("cached_tokens") or 0)
     gen_s = usage.get("generation_duration") or ((t_last - t_first) if t_first and t_last else 0)
     pre_s = usage.get("prompt_eval_duration") or ((t_first - t0) if t_first else 0)
+    if not gen_s and n:
+        # Nothing visible streamed (Tempo9 drops Flint's reasoning and sends only the
+        # final answer): fall back to the whole request, prefill included.
+        gen_s, pre_s = time.time() - t0, 0
     return {"choices": [{"message": {"content": "".join(text), "reasoning_content": "".join(reasoning)}}],
             "usage": usage, "_wall": time.time() - t0,
             "timings": {"predicted_n": n, "predicted_ms": gen_s * 1000, "prompt_n": p, "prompt_ms": pre_s * 1000,
@@ -119,8 +126,12 @@ def summarize(rows):
     t = lambda k: sum(timings(r).get(k, 0) or 0 for r in rows)
     pred_n, pred_ms, prompt_n, prompt_ms = t("predicted_n"), t("predicted_ms"), t("prompt_n"), t("prompt_ms")
     draft_n, draft_acc = t("draft_n"), t("draft_n_accepted")
+    wall = sum(r.get("_wall", 0) for r in rows)
     return {
         "decode_tok_s": round(pred_n / pred_ms * 1000, 2) if pred_ms else None,
+        # tokens over the whole request, prefill and HTTP included: the one number
+        # every server here can be held to, whatever timings it reports
+        "e2e_tok_s": round(pred_n / wall, 2) if wall else None,
         "prefill_tok_s": round(prompt_n / prompt_ms * 1000, 1) if prompt_ms else None,
         "acceptance": round(draft_acc / draft_n, 3) if draft_n else None,
         "predicted_tokens": pred_n,
@@ -171,7 +182,7 @@ def main():
                       f"{tm.get('draft_n_accepted', 0)}/{tm.get('draft_n', 0)} drafts accepted", flush=True)
             s = summarize(rows)
             result["rows"][f"chat/{sampling}"] = s
-            print(f"ROW chat/{sampling} | decode={s['decode_tok_s']} tok/s | prefill={s['prefill_tok_s']} tok/s "
+            print(f"ROW chat/{sampling} | decode={s['decode_tok_s']} tok/s | e2e={s['e2e_tok_s']} tok/s | prefill={s['prefill_tok_s']} tok/s "
                   f"| accept={s['acceptance']} | {s['predicted_tokens']} tokens", flush=True)
         if "quote" in a.workloads:
             r = chat(a.url, quote_msg, a.quote_max_tokens, sampling, think=False)
@@ -183,7 +194,7 @@ def main():
             s["answer_chars"], s["reasoning_chars"] = len(ans), len(msg.get("reasoning_content") or "")
             s["finish_reason"] = r["choices"][0].get("finish_reason")
             result["rows"][f"quote/{sampling}"] = s
-            print(f"ROW quote/{sampling} | decode={s['decode_tok_s']} tok/s | prefill={s['prefill_tok_s']} tok/s "
+            print(f"ROW quote/{sampling} | decode={s['decode_tok_s']} tok/s | e2e={s['e2e_tok_s']} tok/s | prefill={s['prefill_tok_s']} tok/s "
                   f"| accept={s['acceptance']} | coverage={s['coverage']} | {s['predicted_tokens']} tokens "
                   f"| answer {s['answer_chars']} chars, reasoning {s['reasoning_chars']} chars, {s['finish_reason']}", flush=True)
 

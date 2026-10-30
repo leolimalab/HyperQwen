@@ -34,8 +34,8 @@
 # MODEL_PRESET=flint swaps the target for Recursive Flint (RecursiveSI/flint,
 # 40B total / 2.5B active MoE, unsloth UD-IQ3_XXS GGUF), a different model whose
 # decode reads a fraction of the weights per token: the 60+ tok/s class on this
-# Mac that no dense 27B reaches. It has no DFlash2 or MTP drafter, so SPEC
-# defaults to off there; lookup drafting still applies.
+# Mac that no dense 27B reaches. There SPEC=dflash means incoai/Flint-DFlash2
+# with 3 drafts (the default), plus lookup drafting as for Qwen.
 set -euo pipefail
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
@@ -51,7 +51,13 @@ case "$MODEL_PRESET" in
   # 14 of 49 layers are full attention; the other 35 slide over 513 tokens (~35 MiB in all)
   flint) MODEL="${MODEL:-$LMS_MODELS/unsloth/flint-GGUF/flint-UD-IQ3_XXS.gguf}"
          KV_LAYERS=14; KV_HEADS=4; HEAD_DIM=128; SEQ_STATE_MB=40
-         SPEC="${SPEC:-off}"; CTX="${CTX:-long}" ;;
+         # Flint has no MTP head. Its DFlash2 drafter (incoai/Flint-DFlash2, block 8) pays
+         # only with a short block: a MoE verify wakes up to 6 experts per token per layer,
+         # so 7 drafts cost more than they return (54.9 tok/s chat against 62.7 without),
+         # and 3 is the best measured (65.8). 2026-10-30, M4 Pro, mac/results/.
+         DFLASH_DRAFT="${DFLASH_DRAFT:-$LMS_MODELS/incoai/Flint-DFlash2-GGUF/Flint-DFlash2-Q8_0.gguf}"
+         [ "${SPEC:-}" = mtp ] && { echo "Flint has no MTP head; use SPEC=dflash or off" >&2; exit 2; }
+         SPEC="${SPEC:-dflash}"; DRAFT_TOKENS="${DRAFT_TOKENS:-3}"; CTX="${CTX:-long}" ;;
   *) echo "MODEL_PRESET must be qwen or flint (got '$MODEL_PRESET')" >&2; exit 2 ;;
 esac
 DFLASH_DRAFT="${DFLASH_DRAFT:-$LMS_MODELS/incoai/Qwen3.8-27B-DFlash2-GGUF/Qwen3.8-27B-DFlash2-Q4_K_M.gguf}"
