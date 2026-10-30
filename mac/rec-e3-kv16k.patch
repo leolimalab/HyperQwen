@@ -1,0 +1,43 @@
+diff --git a/engine/src/rec_mlx/cache.py b/engine/src/rec_mlx/cache.py
+index b9a9a5b..2e290c2 100644
+--- a/engine/src/rec_mlx/cache.py
++++ b/engine/src/rec_mlx/cache.py
+@@ -45,7 +45,7 @@ _write = mx.fast.metal_kernel(
+ )
+ 
+ # Four append-only blocks fit alongside the fused decoder's weight/scratch buffers.
+-BLOCK_TOKENS = 65536
++BLOCK_TOKENS = 16384
+ MAX_BLOCKS = 4
+ 
+ 
+diff --git a/engine/src/rec_mlx/engine.py b/engine/src/rec_mlx/engine.py
+index e228163..0c83d0e 100644
+--- a/engine/src/rec_mlx/engine.py
++++ b/engine/src/rec_mlx/engine.py
+@@ -94,8 +94,8 @@ class Engine:
+         # Packing replaces native weights with lazy views. Materialize them on their creation
+         # stream before HTTP threads use the native prefill model.
+         mx.eval(self.runtime.model.native.parameters())
+-        # Retain enough allocator cache to reuse the first 1.78-GiB KV block.
+-        cache_limit = 2 * 1024**3
++        # No allocator cache on a 24 GiB Mac: every freed buffer goes back to the system.
++        cache_limit = 0
+         mx.set_cache_limit(cache_limit)
+         self.startup = {
+             "device": device,
+diff --git a/engine/src/rec_mlx/kernels/megakernel.py b/engine/src/rec_mlx/kernels/megakernel.py
+index d833fac..bce18b9 100644
+--- a/engine/src/rec_mlx/kernels/megakernel.py
++++ b/engine/src/rec_mlx/kernels/megakernel.py
+@@ -123,8 +123,8 @@ struct KVView {
+         KVView view=*this; view.offset+=cap*512; return view;
+     }
+     const device bfloat16_t* address(uint i) const {
+-        uint block=global?(i/128)>>16:0;
+-        uint local=global?i%(65536u*128u):i;
++        uint block=global?(i/128)>>14:0;
++        uint local=global?i%(16384u*128u):i;
+         const device bfloat16_t* p=block==0?p0:block==1?p1:block==2?p2:p3;
+         return p+offset+local;
+     }

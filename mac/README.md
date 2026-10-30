@@ -27,11 +27,12 @@ e de 18 com ela, no chat. Os "125+ tok/s no M4 Pro" que a Recursive anuncia são
 [Recursive Flint](https://recursive.com/updates/introducing-recursive-flint). Ele é um MoE de 40B no total com 2,5B ativos
 por token. O número deles foi medido com o motor próprio (`rec`) num M4 Pro de **48 GB**, em 4 bits.
 
-O `rec` não roda aqui. O manifesto dele exige `min_ram_bytes` de 48 GiB, e o CLI recusa abaixo disso
+O `rec` oficial não roda aqui. O manifesto dele exige `min_ram_bytes` de 48 GiB, e o CLI recusa abaixo disso
 ("this model requires 48 GiB of memory"). O único modelo dele é o `flint-int4` em MLX, de 22,6 GB, que também não cabe
 em 24 GB. Testado em 2026-10-30: o instalador oficial (rec 0.1.1) para antes de instalar, com "this model requires 48 GiB of
-memory; detected 24 GiB". Neste Mac, o caminho é o llama.cpp 0.8.0, que já conhece a arquitetura `flint`, com o
-`unsloth/flint-GGUF` UD-IQ3_XXS (14,5 GB):
+memory; detected 24 GiB". O **motor** do rec, porém, roda com os especialistas requantizados para 3 bits e faz ~100 tok/s
+no chat (seção [rec com especialistas em 3 bits](#rec-com-especialistas-em-3-bits-100-toks-no-chat)). Sem preparar nada,
+o caminho é o llama.cpp 0.8.0, que já conhece a arquitetura `flint`, com o `unsloth/flint-GGUF` UD-IQ3_XXS (14,5 GB):
 
 ```bash
 bash mac/download.sh flint
@@ -80,7 +81,7 @@ Mesmo protocolo da tabela de resultados (2026-10-30, llama.cpp 0.8.0, KV q8_0, 6
 
 - Dos 43 forks do `recursive-oss/rec`, só um mira Macs de 24 GB: `thinkspread/rec@local/flint-e3-24gb`. Ele tira a trava
   de 48 GiB, aceita especialistas em INT3 e fixa os pesos com `mx.set_wired_limit`. Mas exige um checkpoint MLX `flint-int4-e3`
-  que não está publicado em lugar nenhum.
+  que não está publicado em lugar nenhum. O `mac/rec_requant_e3.py` gera esse checkpoint (seção seguinte).
 - Os mesmos autores (ThinkSpread) publicam o **Tempo9** e um GGUF de 24 GB do Flint, o `thinkspread/Flint-Q6K-IQ3XXS-GGUF`
   (18,0 GB). Eles anunciam 123–127 tok/s num **M5 Pro** de 24 GB. No **M4 Pro**:
   - o Tempo9 1.2.1 roda **na CPU**: ~17 tok/s. O motor Metal exige a tensor API do Metal 4 (M5 ou mais novo) e
@@ -90,8 +91,58 @@ Mesmo protocolo da tabela de resultados (2026-10-30, llama.cpp 0.8.0, KV q8_0, 6
 - O binário do Tempo9 é assinado ("Developer ID Application: Jiejing Zhang") e notarizado pela Apple. Durante os testes,
   só abriu o próprio servidor em `127.0.0.1`. O projeto é muito novo (domínio e organização no GitHub de 17/08/2026, um único
   desenvolvedor), e o motor é fechado.
-- Conclusão para um M4 Pro de 24 GB: o melhor caminho do Flint continua sendo o llama.cpp com o UD-IQ3_XXS
-  (`MODEL_PRESET=flint`).
+- Conclusão sobre o Tempo9: no M4 Pro ele não serve. Para o Flint num M4 Pro de 24 GB, ficam o motor do rec com
+  especialistas em 3 bits (seção seguinte) e o llama.cpp com o UD-IQ3_XXS (`MODEL_PRESET=flint`).
+
+### rec com especialistas em 3 bits: ~100 tok/s no chat
+
+Testado em 2026-10-30. Usa o motor MLX do rec (megakernel Metal residente) pelo fork `thinkspread/rec@local/flint-e3-24gb`,
+com um checkpoint feito aqui a partir do oficial:
+
+- **Checkpoint:** `mac/rec_requant_e3.py` parte do `RecursiveSI/flint-int4` e muda só os especialistas roteados (21,3 dos 22,6 GB): INT4 g64 vira
+  INT3 g64. As camadas densas ficam em INT4 e os embeddings em INT8. A escala de cada grupo é escolhida por erro quadrático,
+  como o `scale_rule: mse` do original, cortando cada ponta da faixa em 0–40%. O erro em relação ao INT4 fica em 2,89%,
+  contra 3,47% do `mx.quantize` simples. O resultado tem 17,0 GiB (5 shards), com manifesto próprio
+  (`flint-int4-e3.json`) que passa no `checkpoint.validate` do motor.
+- **Bloco de KV:** o motor reserva o KV em blocos fixos de 65.536 tokens, 1,78 GiB já no primeiro pedido, e esse tamanho está
+  gravado no kernel Metal. Com ele, o primeiro pedido empurrou 3 GB para o swap. O `mac/rec-e3-kv16k.patch` baixa o bloco
+  para 16.384 tokens (0,48 GiB, até 4 blocos, ou seja, 65.536 tokens de contexto) e zera o cache do alocador do MLX.
+- **Memória:** pico de 19,1 GB no chat e de 19,85 GB na cópia (7 mil tokens de contexto). Só cabe com LM Studio, Chrome,
+  RustDesk e Monitor de Atividade fechados. Com o cache do alocador em 512 MB e o RustDesk e o Monitor de Atividade abertos,
+  o swap subiu 548 MB em três pedidos e o vigia parou o servidor. Com o cache zerado e os apps fechados, o swap ficou parado
+  nos 10 pedidos.
+
+```bash
+git clone --branch local/flint-e3-24gb https://github.com/thinkspread/rec.git ~/src/rec-e3
+git -C ~/src/rec-e3 apply "$PWD/mac/rec-e3-kv16k.patch"
+uv venv ~/.venvs/rec-e3 --python 3.12
+uv pip install --python ~/.venvs/rec-e3/bin/python ~/src/rec-e3/engine
+hf download RecursiveSI/flint-int4 --local-dir ~/models/flint-int4            # 22,6 GB
+~/.venvs/rec-e3/bin/python -I mac/rec_requant_e3.py ~/models/flint-int4 ~/models/flint-int4-e3 --delete-src   # ~7 min
+SWAP_LIMIT_MB=512 LOAD_GRACE_S=60 LOAD_GRACE_MB=1024 bash mac/serve_rec.sh    # "flint" na porta 18020, contexto de 16k
+python3 mac/bench.py rec --model flint --stream --quote-max-tokens 8000       # depois que a janela de carga fechar
+```
+
+Mesmo protocolo das tabelas acima (rec com temperatura 1,0, top-p 0,95 e top-k 20, os padrões do motor):
+
+| Flint | chat (tok/s) | cópia (tok/s) | cópia: tokens / cobertura | leitura do prompt na cópia (tok/s) |
+|---|---|---|---|---|
+| **rec, especialistas INT3, bloco de KV de 16k** | **101,52** | 88,71 | 4.911 / 0,92 | 636 |
+| llama.cpp UD-IQ3_XXS, sem drafter | 62,67 | 56,61 | 7.850 / 0,99 | 580 |
+| llama.cpp UD-IQ3_XXS, só lookup | 62,26 | **121,78** | 6.972 / 0,98 | |
+| llama.cpp UD-IQ3_XXS, DFlash2 3 drafts + lookup | 65,84 | 118,19 | 6.798 / 0,92 | |
+
+- **No chat, o rec faz 1,5× o melhor llama.cpp** (101,5 contra 65,8 tok/s). Os 8 pedidos ficaram entre 99,9 e 102,6 tok/s.
+- **Na cópia, o lookup do llama.cpp ainda ganha** (121,8 contra 88,7). O rec não especula, e o raciocínio do Flint repete
+  o documento, que é justamente onde o n-gram acerta.
+- **Os 125+ tok/s da Recursive** são de um M4 Pro de 48 GB com os especialistas em 4 bits. Aqui ficou em ~100. Os 3 bits
+  quase não mudam o que cada token lê (~1,4 GB contra ~1,5 GB), porque as camadas densas continuam em 4 bits. A diferença
+  não foi investigada.
+- **Qualidade não foi medida em benchmark.** A requantização de 4 para 3 bits perde algo. A resposta de teste saiu
+  correta, e a cobertura da cópia (0,92) é a mesma do llama.cpp com DFlash2. Antes de usar no dia a dia, vale um teste com as
+  suas tarefas.
+- **Outras quantizações não servem neste motor:** o kernel aceita só 3, 4 ou 8 bits, e só grupos de 64. Um GGUF como o
+  UD-Q2_K_XL (13,6 GB) é formato do llama.cpp e não entra no rec.
 
 ## Por que llama.cpp e não MLX
 

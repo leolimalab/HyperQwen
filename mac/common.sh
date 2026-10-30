@@ -27,7 +27,9 @@ mac_preflight() {
     echo "$lms_loaded" | sed 's/^/     /'
     fail=1
   fi
-  local servers='llama-server|mlx_lm.server|mlx_vlm.server|omlx-cli|omlx-server|oMLX.app/Contents/MacOS'
+  # rec-mlx and tempo9 are matched by their bin/ path, so a shell or monitor
+  # that only mentions them in its arguments does not count as a server.
+  local servers='llama-server|mlx_lm.server|mlx_vlm.server|omlx-cli|omlx-server|oMLX.app/Contents/MacOS|bin/rec-mlx|bin/tempo9'
   if pgrep -f "$servers" >/dev/null; then
     echo "!! another local model server is running:"; pgrep -fl "$servers" | cut -c1-160 | sed 's/^/     /'
     fail=1

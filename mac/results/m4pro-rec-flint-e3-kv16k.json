@@ -1,0 +1,45 @@
+{
+ "label": "m4pro-rec-flint-e3-kv16k",
+ "when": "2026-10-30T19:20",
+ "args": {
+  "label": "m4pro-rec-flint-e3-kv16k",
+  "url": "http://127.0.0.1:18020",
+  "workloads": "chat,quote",
+  "sampling": "default",
+  "max_tokens": 512,
+  "quote_max_tokens": 8000,
+  "prompts": 8,
+  "no_think": false,
+  "model": "flint",
+  "stream": true
+ },
+ "server": {
+  "model_path": "flint",
+  "total_slots": null,
+  "build_info": "mlx_vlm"
+ },
+ "swap_mb_before": 903.75,
+ "rows": {
+  "chat/default": {
+   "decode_tok_s": 101.52,
+   "e2e_tok_s": 94.36,
+   "prefill_tok_s": 226.4,
+   "acceptance": null,
+   "predicted_tokens": 4096,
+   "requests": 8
+  },
+  "quote/default": {
+   "decode_tok_s": 88.71,
+   "e2e_tok_s": 83.56,
+   "prefill_tok_s": 636.1,
+   "acceptance": null,
+   "predicted_tokens": 4911,
+   "requests": 1,
+   "coverage": 0.915,
+   "answer_chars": 8003,
+   "reasoning_chars": 10665,
+   "finish_reason": null
+  }
+ },
+ "swap_mb_after": 895.75
+}
