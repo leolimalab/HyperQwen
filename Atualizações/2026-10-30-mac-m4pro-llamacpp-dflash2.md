@@ -1,7 +1,7 @@
 # Qwen3.8-27B no MacBook M4 Pro 24 GB com as ideias do HyperQwen (llama.cpp + DFlash2)
 
 **Timestamp:** 2026-10-30T13:09 (sessão iniciada por volta de 11:58)
-**Branch:** `local-mac-mi50` (criada a partir de `main` @ f382342)
+**Branch:** `mac-apple-silicon` (criada a partir de `main` @ f382342 como `local-mac-mi50` e renomeada às ~15:45)
 
 ## Contexto / motivação
 
@@ -10,7 +10,7 @@ O usuário clonou o HyperQwen (syv-ai) e pediu duas coisas:
 1. rodar o Qwen3.8-27B no MacBook M4 Pro de 24 GB, o mais rápido possível, usando as ideias do projeto;
 2. depois, configurar o PC com 2× MI50 de 16 GB.
 
-Esta sessão cobre o Mac. A parte das MI50 ficou para a próxima.
+Esta sessão cobre o Mac. Às ~15:45, o usuário decidiu que a parte das MI50 não será implementada.
 
 ## Origem das informações e decisões
 
@@ -222,10 +222,10 @@ O teste de cópia reproduz ~2k tokens.
   - comparação em modo greedy.
 - O vocabulário reduzido do drafter não tem caminho no llama.cpp para qwen35 (PR #29143 em aberto).
 - O LM Studio (LLM local dos resumos do ai-memory) ficou fechado a pedido do usuário. Precisa ser religado depois.
-- A parte das 2× MI50 de 16 GB ainda falta. A análise colada recomenda TP=4 para placas de 16 GB, mas com duas placas o máximo é TP=2:
-  32 GB com KV em fp16 no fork do vLLM. Comparar com o llama.cpp em ROCm/Vulkan, que tem KV quantizado, DFlash2 e MTP.
-- Publicação (pedido do usuário, ~15:35): commit na branch `local-mac-mi50` e push para o fork público `leolimalab/HyperQwen`,
-  do `syv-ai/HyperQwen`. A visibilidade foi escolha do usuário. Os JSON em `mac/results/` levam caminhos locais (`/Users/...`).
+- MI50: fora do escopo, por decisão do usuário (~15:45). A análise colada no meio da sessão fica só como registro.
+- Publicação (pedido do usuário, ~15:35): commit e push para o fork público `leolimalab/HyperQwen`, do `syv-ai/HyperQwen`.
+  A visibilidade foi escolha do usuário. Os JSON em `mac/results/` levam caminhos locais (`/Users/...`).
+- Às ~15:45, a branch foi renomeada de `local-mac-mi50` para `mac-apple-silicon` (no GitHub e localmente), porque só o Mac foi implementado.
 
 ## Arquivos tocados
 
