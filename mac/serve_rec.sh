@@ -10,7 +10,7 @@
 # blocks, 65,536 tokens upstream (1.78 GiB for the first, even for a short
 # context). With that block the first request pushed 3 GB into swap on this
 # Mac, so mac/rec-e3-kv16k.patch cuts the block to 16,384 tokens (0.48 GiB; up
-# to 4 blocks, 65,536 tokens of context) and the allocator cache to 512 MiB.
+# to 4 blocks, 65,536 tokens of context) and turns the allocator cache off.
 #
 # Setup, outside the Drive:
 #   git clone --branch local/flint-e3-24gb https://github.com/thinkspread/rec.git ~/src/rec-e3

@@ -90,8 +90,20 @@ Mesmo protocolo das tabelas do `mac/README.md`, com os padrões de sorteio do re
   e só roda no llama.cpp; lá a estimativa é de 66–70 tok/s, com qualidade menor. Não testado.
 - Os commits `30e7638`, `125c075` e as mudanças desta sessão ainda não estão na `main` do fork.
 
+## Pi (pi.dev) com o rec
+
+- **Pedido do usuário:** "Seria possivel utilizar esse modelo com o pi.dev?" e depois "monte o .sh para testar".
+- **`mac/pi_rec.sh`** (novo): faz o que o `rec launch pi` faz, sem o CLI do rec.
+  - Instala o `@mariozechner/pi-coding-agent@0.73.1` com `npm ci` a partir do `package-lock.json` do fork, em
+    `~/.local/share/hyperqwen-pi` (fora do Drive).
+  - Copia a extensão do rec (`flint-pi.ts`, `pi-transport.mjs`, `pi-logo.mjs` e o logo) e abre o pi com
+    `--provider rec --model flint`, apontado para o `serve_rec.sh` na porta 18020, com contexto de 16k.
+- **Não testado ainda:** o classificador do modo automático bloqueou o `npm ci` rodado pelo Claude. A instalação fica com o
+  usuário (`INSTALL_ONLY=1 bash mac/pi_rec.sh`).
+
 ## Arquivos tocados
 
+- `mac/pi_rec.sh` (novo)
 - `mac/rec_requant_e3.py` (novo)
 - `mac/rec-e3-kv16k.patch` (novo)
 - `mac/serve_rec.sh` (novo)
